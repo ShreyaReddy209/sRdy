@@ -1,8 +1,14 @@
+/**
+ * Prediction "API" — runs entirely client-side via TensorFlow.js (see lib/model/).
+ * Kept the same function signatures as the old backend-fetch version so nothing
+ * else in the app needs to change: same LSTM model, same explain/nudge logic,
+ * same cohort dataset — just executed in the browser instead of a Python server.
+ */
 import type { Contributor, DailyAggregate, DailyGoal, RiskLevel } from '../types/dashboard'
 import type { CoachTone } from './userData'
 import { buildSequence, type SequenceHistory } from '../lib/buildSequence'
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+import { loadModel, runPrediction } from '../lib/model/predict'
+import { fetchPopulationInsight as fetchCohortMoodUsage, percentileBetterThan } from '../lib/model/cohortStats'
 
 export interface PredictionResult {
   riskLevel: RiskLevel
@@ -35,66 +41,35 @@ export async function fetchPrediction(
   history?: SequenceHistory,
 ): Promise<PredictionResult> {
   const sequence = buildSequence(goal, mood, 14, todayAggregate, history)
-
-  const res = await fetch(`${API_URL}/predict`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sequence,
-      goal_label: goal,
-      coach_tone: coachTone,
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail ?? `Prediction failed (${res.status})`)
-  }
-
-  const data = await res.json()
+  const result = await runPrediction(sequence, goal, coachTone)
+  const cohortPercentile = await percentileBetterThan(result.riskScore)
 
   return {
-    riskLevel: data.risk_level as RiskLevel,
-    riskScore: data.risk_score,
-    forecast: (data.forecast as number[]).map((score, i) => ({
+    riskLevel: result.riskLevel as RiskLevel,
+    riskScore: result.riskScore,
+    forecast: result.forecast.map((score, i) => ({
       day: FORECAST_LABELS[i] ?? `T+${i}`,
       score,
     })),
-    explanation: data.explanation,
-    contributors: data.contributors,
+    explanation: result.explanation,
+    contributors: result.contributors,
     nudge: {
-      message: data.nudge.message,
-      windowStart: data.nudge.window_start,
-      windowEnd: data.nudge.window_end,
+      message: result.nudge.message,
+      windowStart: result.nudge.window_start,
+      windowEnd: result.nudge.window_end,
     },
-    cohortPercentile: data.cohort_percentile ?? null,
+    cohortPercentile,
   }
 }
 
 export async function fetchPopulationInsight(): Promise<PopulationInsight | null> {
-  try {
-    const res = await fetch(`${API_URL}/insights`)
-    if (!res.ok) return null
-    const data = await res.json()
-    const m = data.mood_usage
-    if (!m) return null
-    return {
-      highStressAvgMin: m.high_stress_avg_min,
-      lowStressAvgMin: m.low_stress_avg_min,
-      pctDiff: m.pct_diff,
-      sampleSize: m.sample_size,
-    }
-  } catch {
-    return null
-  }
+  return fetchCohortMoodUsage()
 }
 
 export async function checkApiHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_URL}/health`)
-    if (!res.ok) return false
-    const data = await res.json()
-    return data.model_loaded === true
+    await loadModel()
+    return true
   } catch {
     return false
   }

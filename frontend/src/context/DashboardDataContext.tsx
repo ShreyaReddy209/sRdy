@@ -301,7 +301,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     live: aggregate
       ? 'Risk score and forecast from the LSTM model, using real usage data from your browser extension.'
       : 'Risk score and forecast from the LSTM model, based on your check-in only (install the browser extension to include real usage data).',
-    fallback: 'Backend unreachable — no new prediction could be computed. Start it with: uvicorn app.main:app --reload',
+    fallback: 'Could not run the on-device prediction model — try refreshing the page.',
     error: 'Could not load prediction.',
   }[predictionStatus]
 
