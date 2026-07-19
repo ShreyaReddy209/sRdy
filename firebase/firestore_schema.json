@@ -1,0 +1,123 @@
+{
+  "firestore": {
+    "collections": {
+      "users": {
+        "documentId": "{uid}",
+        "fields": {
+          "email": "string",
+          "displayName": "string",
+          "createdAt": "timestamp",
+          "onboardingComplete": "boolean",
+          "cohortId": "string | null",
+          "settings": {
+            "nudgeEnabled": "boolean",
+            "focusModeDefault": "boolean",
+            "coachTone": "gentle | direct | balanced"
+          }
+        },
+        "subcollections": {
+          "dailyGoals": {
+            "documentId": "{YYYY-MM-DD}",
+            "fields": {
+              "goal": "study | work | entertainment | relax",
+              "setAt": "timestamp"
+            }
+          },
+          "checkIns": {
+            "documentId": "{YYYY-MM-DD}",
+            "fields": {
+              "moodScore": "number (1-5)",
+              "stressScore": "number (1-5)",
+              "sleepQuality": "number (1-5)",
+              "completedAt": "timestamp"
+            }
+          },
+          "dailyAggregates": {
+            "documentId": "{YYYY-MM-DD}",
+            "fields": {
+              "timeByCategory": {
+                "social_media": "number (minutes)",
+                "video_streaming": "number",
+                "gaming": "number",
+                "productivity": "number",
+                "education": "number",
+                "news": "number",
+                "shopping": "number",
+                "communication": "number",
+                "other": "number"
+              },
+              "compulsiveCheckCount": "number",
+              "tabSwitchFrequency": "number",
+              "lateNightRatio": "number",
+              "activeIdleRatio": "number",
+              "avgSessionLengthMin": "number",
+              "goalAlignmentScore": "number (0-1)",
+              "totalActiveMinutes": "number",
+              "updatedAt": "timestamp"
+            }
+          },
+          "predictions": {
+            "documentId": "{YYYY-MM-DD}",
+            "fields": {
+              "riskLevel": "low | moderate | high | critical",
+              "riskScore": "number (0-1)",
+              "forecast": ["number (7-day risk scores)"],
+              "topContributors": [
+                { "feature": "string", "impact": "number", "direction": "up | down" }
+              ],
+              "explanation": "string",
+              "nudge": {
+                "message": "string",
+                "scheduledAt": "timestamp",
+                "windowStart": "string (HH:mm)",
+                "windowEnd": "string (HH:mm)",
+                "delivered": "boolean"
+              },
+              "modelVersion": "string",
+              "generatedAt": "timestamp"
+            }
+          },
+          "focusSessions": {
+            "documentId": "{sessionId}",
+            "fields": {
+              "startedAt": "timestamp",
+              "endedAt": "timestamp | null",
+              "classification": "productive | compulsive | mixed",
+              "domains": ["string"],
+              "durationMinutes": "number"
+            }
+          }
+        }
+      },
+      "rawEvents": {
+        "documentId": "auto",
+        "fields": {
+          "userId": "string",
+          "domain": "string",
+          "category": "string",
+          "eventType": "tab_active | tab_switch | idle_start | idle_end | visit",
+          "durationSec": "number",
+          "isActive": "boolean",
+          "timestamp": "timestamp"
+        },
+        "notes": "High-volume; TTL or daily rollup job aggregates into dailyAggregates"
+      },
+      "cohorts": {
+        "documentId": "{cohortId}",
+        "fields": {
+          "name": "string",
+          "memberCount": "number",
+          "anonymizedStats": {
+            "medianRiskScore": "number",
+            "p75CompulsiveChecks": "number"
+          }
+        }
+      }
+    }
+  },
+  "securityRulesSummary": {
+    "users": "read/write own uid only",
+    "rawEvents": "create own; read own; no cross-user",
+    "cohorts": "read if member; write admin only"
+  }
+}

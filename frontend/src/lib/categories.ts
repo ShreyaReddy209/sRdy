@@ -1,0 +1,24 @@
+export const CATEGORY_META: Record<string, { label: string; color: string }> = {
+  social_media: { label: 'Social Media', color: '#ec4899' },
+  video_streaming: { label: 'Video', color: '#8b5cf6' },
+  gaming: { label: 'Gaming', color: '#f97316' },
+  productivity: { label: 'Productivity', color: '#3b82f6' },
+  education: { label: 'Education', color: '#10b981' },
+  news: { label: 'News', color: '#eab308' },
+  shopping: { label: 'Shopping', color: '#f43f5e' },
+  communication: { label: 'Communication', color: '#06b6d4' },
+  other: { label: 'Other', color: '#94a3b8' },
+}
+
+export function aggregateToCategoryList(
+  timeByCategory: Record<string, number>,
+): { category: string; minutes: number; color: string }[] {
+  return Object.entries(timeByCategory)
+    .filter(([, minutes]) => minutes > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, minutes]) => ({
+      category: CATEGORY_META[key]?.label ?? key,
+      minutes: Math.round(minutes),
+      color: CATEGORY_META[key]?.color ?? '#94a3b8',
+    }))
+}

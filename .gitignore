@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Frontend build output
+frontend/dist/
+frontend/dist-ssr/
+frontend/tsconfig.tsbuildinfo
+
+# Environment secrets
+.env
+.env.local
+**/.env
+**/.env.local
+!frontend/.env.example
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Large regenerable ML training cache (rebuild via ml/synthetic_data_generator.py)
+ml/data/lstm_sequences.npz
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

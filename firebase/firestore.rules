@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /dailyGoals/{dateId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /checkIns/{dateId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /dailyAggregates/{dateId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /predictions/{dateId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /focusSessions/{sessionId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    match /rawEvents/{eventId} {
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+    }
+
+    match /cohorts/{cohortId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}

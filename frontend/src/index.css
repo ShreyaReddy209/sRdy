@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --color-accent: #0d9488;
+  --color-accent-hover: #0f766e;
+  --color-surface: #f7f7f5;
+  --color-ink: #1c1917;
+  --color-muted: #78716c;
+  --color-border: #e7e5e4;
+}
+
+body {
+  @apply bg-[#f7f7f5] text-stone-900 antialiased;
+  font-family: var(--font-sans);
+}
+
+.card {
+  @apply rounded-xl border border-stone-200 bg-white;
+}
+
+.input {
+  @apply w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 outline-none transition;
+  @apply focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20;
+}
+
+.btn-accent {
+  @apply inline-flex items-center justify-center rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-teal-800 disabled:opacity-50;
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium text-stone-600 transition hover:bg-stone-100;
+}
+
+.label {
+  @apply mb-1.5 block text-sm font-medium text-stone-700;
+}
+
+.page-title {
+  @apply text-xl font-semibold tracking-tight text-stone-900 sm:text-2xl;
+}
+
+.page-desc {
+  @apply mt-1 text-sm text-stone-500;
+}
+
+.section-heading {
+  @apply text-base font-semibold text-stone-900;
+}
+
+.section-desc {
+  @apply text-sm text-stone-500;
+}

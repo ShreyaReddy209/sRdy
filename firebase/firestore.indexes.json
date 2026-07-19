@@ -1,0 +1,19 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "dailyAggregates",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "checkIns",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

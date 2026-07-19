@@ -1,0 +1,35 @@
+{
+  "sequence_length": 14,
+  "forecast_horizon": 7,
+  "num_features": 19,
+  "feature_names": [
+    "time_social_media",
+    "time_video_streaming",
+    "time_gaming",
+    "time_productivity",
+    "time_education",
+    "time_news",
+    "time_shopping",
+    "time_communication",
+    "time_other",
+    "compulsive_check_count",
+    "tab_switch_frequency",
+    "late_night_ratio",
+    "active_idle_ratio",
+    "avg_session_length_min",
+    "daily_goal",
+    "goal_alignment_score",
+    "mood_score",
+    "stress_score",
+    "sleep_quality"
+  ],
+  "risk_levels": [
+    "low",
+    "moderate",
+    "high",
+    "critical"
+  ],
+  "val_loss": 0.9180802702903748,
+  "val_accuracy": 0.6000000238418579,
+  "model_path": "lstm_model.keras"
+}
