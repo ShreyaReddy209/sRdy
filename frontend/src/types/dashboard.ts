@@ -36,6 +36,11 @@ export interface CategoryBreakdownItem {
   minutes: number
   color: string
   sites: { domain: string; minutes: number }[]
+  /**
+   * Category minutes that have no per-domain rows yet (e.g. tracked before
+   * site-level logging). Kept so history is never wiped for transparency.
+   */
+  unattributedMinutes: number
 }
 
 export interface DashboardData {

@@ -128,3 +128,17 @@ button:disabled {
 .ghost-btn + .ghost-btn {
   margin-top: 6px;
 }
+.danger-link {
+  margin-top: 10px;
+  width: 100%;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: #a8a29e;
+  font-size: 10px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.danger-link:hover {
+  color: #b91c1c;
+}

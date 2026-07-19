@@ -137,7 +137,13 @@ $('sync-now-btn').addEventListener('click', () => {
 })
 
 $('reset-today-btn').addEventListener('click', () => {
-  if (!confirm("Clear today's tracked minutes/categories and start fresh? (Keeps you signed in.)")) return
+  if (
+    !confirm(
+      "Clear ALL of today's tracking? This permanently removes today's history and is not needed for site lists — new browsing adds domains on top of past totals.",
+    )
+  ) {
+    return
+  }
   chrome.runtime.sendMessage({ type: 'WELLSENSE_RESET_TODAY' }, (res) => {
     if (res?.ok) applyPayload(res)
   })

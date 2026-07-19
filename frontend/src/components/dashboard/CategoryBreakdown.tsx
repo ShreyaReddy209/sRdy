@@ -8,16 +8,13 @@ interface Props {
 }
 
 function formatMinutes(m: number): string {
-  if (m < 1) return `${Math.round(m * 60)}s`
+  if (m < 1 && m > 0) return `${Math.round(m * 60)}s`
   if (Number.isInteger(m)) return `${m}m`
   return `${m}m`
 }
 
 export default function CategoryBreakdown({ categories, isLive }: Props) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
-  const hasAnyMinutes = categories.some((c) => c.minutes > 0)
-  const hasAnySites = categories.some((c) => c.sites.length > 0)
-  const needsSiteReset = hasAnyMinutes && !hasAnySites
 
   if (categories.length === 0) {
     return (
@@ -45,18 +42,10 @@ export default function CategoryBreakdown({ categories, isLive }: Props) {
           </span>
         )}
       </div>
-      <p className="section-desc">Today&apos;s real usage — click a category to see sites</p>
-      {needsSiteReset && (
-        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-          <p className="font-medium">Site list not available for today&apos;s totals yet</p>
-          <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-amber-900/90">
-            <li>Open the WellSense Tracker popup</li>
-            <li>Click <span className="font-semibold">Reset today&apos;s totals</span></li>
-            <li>Browse a few sites for 1–2 minutes, then click <span className="font-semibold">Sync now</span></li>
-            <li>Refresh this page — click a category to see each domain</li>
-          </ol>
-        </div>
-      )}
+      <p className="section-desc">
+        Click a category to see each site. Past totals stay visible — new browsing adds domain rows
+        without erasing earlier time.
+      </p>
       <div className="mt-3 h-44">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -96,7 +85,8 @@ export default function CategoryBreakdown({ categories, isLive }: Props) {
       <ul className="mt-3 space-y-1">
         {categories.map((c) => {
           const open = expandedKey === c.key
-          const hasSites = c.sites.length > 0
+          const siteCount = c.sites.length
+          const hasDetail = siteCount > 0 || c.unattributedMinutes > 0
           return (
             <li key={c.key}>
               <button
@@ -109,9 +99,12 @@ export default function CategoryBreakdown({ categories, isLive }: Props) {
                 <span className="flex items-center gap-2 text-stone-700">
                   <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
                   {c.category}
-                  {hasSites && (
+                  {hasDetail && (
                     <span className="text-[11px] font-normal text-stone-400">
-                      {open ? '▾' : '▸'} {c.sites.length} site{c.sites.length === 1 ? '' : 's'}
+                      {open ? '▾' : '▸'}
+                      {siteCount > 0
+                        ? ` ${siteCount} site${siteCount === 1 ? '' : 's'}`
+                        : ' details'}
                     </span>
                   )}
                 </span>
@@ -119,23 +112,34 @@ export default function CategoryBreakdown({ categories, isLive }: Props) {
               </button>
               {open && (
                 <ul className="mb-1 ml-5 mt-0.5 space-y-1 border-l border-stone-200 pl-3">
-                  {hasSites ? (
-                    c.sites.map((site) => (
-                      <li
-                        key={site.domain}
-                        className="flex items-center justify-between gap-3 text-xs text-stone-600"
-                      >
-                        <span className="truncate font-medium text-stone-700">{site.domain}</span>
-                        <span className="shrink-0 tabular-nums text-stone-500">
-                          {formatMinutes(site.minutes)}
+                  {c.sites.map((site) => (
+                    <li
+                      key={site.domain}
+                      className="flex items-center justify-between gap-3 text-xs text-stone-600"
+                    >
+                      <span className="truncate font-medium text-stone-700">{site.domain}</span>
+                      <span className="shrink-0 tabular-nums text-stone-500">
+                        {formatMinutes(site.minutes)}
+                      </span>
+                    </li>
+                  ))}
+                  {c.unattributedMinutes > 0 && (
+                    <li className="flex items-start justify-between gap-3 text-xs text-stone-500">
+                      <span>
+                        <span className="font-medium text-stone-600">Earlier activity</span>
+                        <span className="mt-0.5 block text-[11px] leading-snug text-stone-400">
+                          Time kept for transparency — tracked before per-site logging (domains not
+                          stored for this slice).
                         </span>
-                      </li>
-                    ))
-                  ) : (
+                      </span>
+                      <span className="shrink-0 tabular-nums text-stone-500">
+                        {formatMinutes(c.unattributedMinutes)}
+                      </span>
+                    </li>
+                  )}
+                  {c.sites.length === 0 && c.unattributedMinutes <= 0 && (
                     <li className="text-xs text-stone-500">
-                      {needsSiteReset
-                        ? 'These minutes were saved before per-site tracking. Use Reset today’s totals in the extension popup (see the yellow box above).'
-                        : 'No sites recorded in this category yet — keep browsing while signed into the extension.'}
+                      No sites in this category yet — keep browsing with the extension signed in.
                     </li>
                   )}
                 </ul>

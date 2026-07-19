@@ -25,12 +25,17 @@ export function aggregateToCategoryList(
         .sort((a, b) => b.minutes - a.minutes)
         .map((s) => ({ domain: s.domain, minutes: Math.round(s.minutes * 10) / 10 }))
 
+      const attributed = categorySites.reduce((sum, s) => sum + s.minutes, 0)
+      const total = Math.round(minutes * 10) / 10
+      const unattributedMinutes = Math.max(0, Math.round((total - attributed) * 10) / 10)
+
       return {
         key,
         category: CATEGORY_META[key]?.label ?? key,
-        minutes: Math.round(minutes * 10) / 10,
+        minutes: total,
         color: CATEGORY_META[key]?.color ?? '#94a3b8',
         sites: categorySites,
+        unattributedMinutes,
       }
     })
 }
