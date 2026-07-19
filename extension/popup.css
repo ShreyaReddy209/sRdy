@@ -84,6 +84,15 @@ button:disabled {
 }
 .stat-value {
   font-weight: 600;
+  text-transform: none;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+#current-category,
+#top-category {
   text-transform: capitalize;
 }
 .sync-note {

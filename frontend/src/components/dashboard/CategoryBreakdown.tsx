@@ -15,6 +15,9 @@ function formatMinutes(m: number): string {
 
 export default function CategoryBreakdown({ categories, isLive }: Props) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
+  const hasAnyMinutes = categories.some((c) => c.minutes > 0)
+  const hasAnySites = categories.some((c) => c.sites.length > 0)
+  const needsSiteReset = hasAnyMinutes && !hasAnySites
 
   if (categories.length === 0) {
     return (
@@ -43,6 +46,17 @@ export default function CategoryBreakdown({ categories, isLive }: Props) {
         )}
       </div>
       <p className="section-desc">Today&apos;s real usage — click a category to see sites</p>
+      {needsSiteReset && (
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+          <p className="font-medium">Site list not available for today&apos;s totals yet</p>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-amber-900/90">
+            <li>Open the WellSense Tracker popup</li>
+            <li>Click <span className="font-semibold">Reset today&apos;s totals</span></li>
+            <li>Browse a few sites for 1–2 minutes, then click <span className="font-semibold">Sync now</span></li>
+            <li>Refresh this page — click a category to see each domain</li>
+          </ol>
+        </div>
+      )}
       <div className="mt-3 h-44">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -119,9 +133,9 @@ export default function CategoryBreakdown({ categories, isLive }: Props) {
                     ))
                   ) : (
                     <li className="text-xs text-stone-500">
-                      No per-site detail yet for this slice. Reload the extension (v1.2+) and browse a bit —
-                      new time is tracked per domain. Older &quot;Other&quot; minutes from before this update
-                      won&apos;t list sites unless you reset today&apos;s totals in the popup.
+                      {needsSiteReset
+                        ? 'These minutes were saved before per-site tracking. Use Reset today’s totals in the extension popup (see the yellow box above).'
+                        : 'No sites recorded in this category yet — keep browsing while signed into the extension.'}
                     </li>
                   )}
                 </ul>

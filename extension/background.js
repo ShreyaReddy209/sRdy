@@ -66,7 +66,10 @@ async function ensureAlarm() {
 }
 
 async function loadState() {
-  if (memoryState) return memoryState
+  if (memoryState) {
+    memoryState.todayStats = normalizeStats(memoryState.todayStats)
+    return memoryState
+  }
 
   const stored = await chrome.storage.local.get([
     'todayDate',
@@ -401,23 +404,74 @@ async function flushAggregate() {
   }
 }
 
-function buildStatsPayload(state) {
-  const nextTickAt = (state.lastTickAt || Date.now()) + TICK_PERIOD_MS
-  const secondsToSync = Math.max(0, Math.ceil((nextTickAt - Date.now()) / 1000))
-  const domain = state.currentSession?.domain ?? null
-  const currentCategory = domain ? categoryFor(domain) : null
-  // Keep session.category in sync for the next tick
-  if (state.currentSession && currentCategory && state.currentSession.category !== currentCategory) {
-    state.currentSession.category = currentCategory
+/** Resolve the tab the user is actually on (works even while the extension popup is open). */
+async function resolveActiveDomain() {
+  const queries = [
+    { active: true, lastFocusedWindow: true },
+    { active: true, currentWindow: true },
+  ]
+  for (const q of queries) {
+    try {
+      const tabs = await chrome.tabs.query(q)
+      const domain = extractDomain(tabs[0]?.url ?? '')
+      if (domain) return domain
+    } catch {
+      /* try next query */
+    }
   }
+  return null
+}
+
+async function buildStatsPayload(state) {
+  const lastTick = Number(state.lastTickAt)
+  const safeLastTick = Number.isFinite(lastTick) && lastTick > 0 ? lastTick : Date.now()
+  const nextTickAt = safeLastTick + TICK_PERIOD_MS
+  const secondsToSync = Math.max(0, Math.ceil((nextTickAt - Date.now()) / 1000))
+
+  // Prefer live active tab — currentSession can be stale right after the service worker wakes
+  // or while the popup is open and focus events get weird.
+  let liveDomain = null
+  try {
+    liveDomain = await resolveActiveDomain()
+  } catch {
+    liveDomain = null
+  }
+  const domain = liveDomain ?? state.currentSession?.domain ?? null
+  let currentCategory = null
+  try {
+    currentCategory = domain ? categoryFor(domain) : null
+  } catch {
+    currentCategory = domain ? 'other' : null
+  }
+
+  if (domain) {
+    if (!state.currentSession || state.currentSession.domain !== domain) {
+      state.currentSession = {
+        domain,
+        category: currentCategory,
+        startedAt: state.currentSession?.startedAt ?? Date.now(),
+      }
+    } else {
+      state.currentSession.category = currentCategory
+    }
+    // If we can see an http(s) tab, treat the browser as focused for accrual/display
+    // (extension popup often flips windowFocused to false incorrectly).
+    if (liveDomain) state.windowFocused = true
+    try {
+      await saveState()
+    } catch {
+      /* non-fatal for popup display */
+    }
+  }
+
   return {
     stats: state.todayStats,
     currentDomain: domain,
-    currentCategory,
-    isPaused: !state.windowFocused || state.isIdle,
-    isIdle: state.isIdle,
-    windowFocused: state.windowFocused,
-    lastTickAt: state.lastTickAt,
+    currentCategory: currentCategory || null,
+    isPaused: state.isIdle || (!state.windowFocused && !domain),
+    isIdle: Boolean(state.isIdle),
+    windowFocused: Boolean(state.windowFocused || liveDomain),
+    lastTickAt: safeLastTick,
     nextTickAt,
     secondsToSync,
   }
@@ -438,7 +492,6 @@ async function resetTodayStats() {
   }
   await saveState()
   await flushAggregate()
-  return buildStatsPayload(state)
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -463,21 +516,30 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'WELLSENSE_GET_STATS') {
     ensureAlarm()
       .then(() => loadState())
-      .then((state) => sendResponse(buildStatsPayload(state)))
-      .catch(() => sendResponse(null))
+      .then((state) => buildStatsPayload(state))
+      .then((payload) => sendResponse(payload))
+      .catch((err) => {
+        console.warn('WellSense GET_STATS failed', err)
+        sendResponse(null)
+      })
     return true
   }
 
   if (msg.type === 'WELLSENSE_FORCE_SYNC') {
     tick()
       .then(() => loadState())
-      .then((state) => sendResponse({ ok: true, ...buildStatsPayload(state) }))
+      .then((state) => buildStatsPayload(state))
+      .then((payload) => sendResponse({ ok: true, ...payload }))
       .catch((err) => sendResponse({ ok: false, error: err.message }))
     return true
   }
 
   if (msg.type === 'WELLSENSE_RESET_TODAY') {
     resetTodayStats()
+      .then(async () => {
+        const state = await loadState()
+        return buildStatsPayload(state)
+      })
       .then((payload) => sendResponse({ ok: true, ...payload }))
       .catch((err) => sendResponse({ ok: false, error: err.message }))
     return true
