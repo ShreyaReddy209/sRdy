@@ -180,7 +180,9 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
           dailyGoal,
           mood,
           streakDays: computeStreak(streakCheckIns),
-          categoryBreakdown: agg ? aggregateToCategoryList(agg.timeByCategory) : d.categoryBreakdown,
+          categoryBreakdown: agg
+            ? aggregateToCategoryList(agg.timeByCategory, agg.sites)
+            : d.categoryBreakdown,
         }))
 
         const personalized = personalizeMoodUsage(recentCheckIns, recentAggs)
@@ -231,7 +233,10 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
         const hist: SequenceHistory = { aggregates: recentAggs, checkIns: recentCheckIns }
         setAggregate(agg)
         setHistory(hist)
-        setData((d) => ({ ...d, categoryBreakdown: aggregateToCategoryList(agg.timeByCategory) }))
+        setData((d) => ({
+          ...d,
+          categoryBreakdown: aggregateToCategoryList(agg.timeByCategory, agg.sites),
+        }))
         const { goal, mood, tone } = latestRef.current
         await runPrediction(goal, mood, agg, tone, hist)
       } catch {

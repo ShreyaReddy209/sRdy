@@ -8,9 +8,18 @@ export interface Contributor {
   direction: 'up' | 'down'
 }
 
+/** One site’s contribution inside a category (from the extension). */
+export interface SiteUsage {
+  domain: string
+  category: string
+  minutes: number
+}
+
 /** Written by the browser extension every ~1 minute */
 export interface DailyAggregate {
   timeByCategory: Record<string, number>
+  /** Per-domain minutes + category — used for click-to-expand breakdowns */
+  sites: SiteUsage[]
   compulsiveCheckCount: number
   tabSwitchFrequency: number
   lateNightRatio: number
@@ -20,11 +29,20 @@ export interface DailyAggregate {
   totalActiveMinutes: number
 }
 
+export interface CategoryBreakdownItem {
+  /** Stable key e.g. education, other */
+  key: string
+  category: string
+  minutes: number
+  color: string
+  sites: { domain: string; minutes: number }[]
+}
+
 export interface DashboardData {
   riskLevel: RiskLevel
   riskScore: number
   forecast: { day: string; score: number }[]
-  categoryBreakdown: { category: string; minutes: number; color: string }[]
+  categoryBreakdown: CategoryBreakdownItem[]
   contributors: Contributor[]
   explanation: string
   nudge: {

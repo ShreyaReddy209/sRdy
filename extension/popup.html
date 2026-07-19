@@ -24,9 +24,15 @@
     <div id="signed-in" class="panel hidden">
       <p class="desc">Signed in as <span id="user-email"></span></p>
 
+      <div id="tracking-status" class="status-pill status-active">Tracking</div>
+
       <div class="stat-row">
         <span class="stat-label">Current site</span>
         <span id="current-domain" class="stat-value">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Category</span>
+        <span id="current-category" class="stat-value">—</span>
       </div>
       <div class="stat-row">
         <span class="stat-label">Active today</span>
@@ -44,8 +50,17 @@
         <span class="stat-label">Compulsive checks</span>
         <span id="compulsive-count" class="stat-value">0</span>
       </div>
+      <div class="stat-row">
+        <span class="stat-label">Next sync</span>
+        <span id="sync-countdown" class="stat-value mono">—</span>
+      </div>
 
-      <p class="sync-note">Syncs to your dashboard about once a minute.</p>
+      <p class="sync-note">
+        Time accrues while this Chrome window is focused. Switching apps pauses tracking but keeps
+        your current site. Compulsive checks = tabs left in under 8 seconds.
+      </p>
+      <button id="sync-now-btn" class="ghost-btn" type="button">Sync now</button>
+      <button id="reset-today-btn" class="ghost-btn" type="button">Reset today’s totals</button>
       <button id="signout-btn" class="ghost-btn" type="button">Sign out</button>
     </div>
 

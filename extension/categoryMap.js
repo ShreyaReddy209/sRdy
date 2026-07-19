@@ -79,7 +79,7 @@ const DOMAIN_CATEGORIES = {
   'localhost': 'productivity',
   '127.0.0.1': 'productivity',
 
-  // Education
+  // Education / coding practice
   'coursera.org': 'education',
   'udemy.com': 'education',
   'khanacademy.org': 'education',
@@ -87,13 +87,26 @@ const DOMAIN_CATEGORIES = {
   'geeksforgeeks.org': 'education',
   'w3schools.com': 'education',
   'leetcode.com': 'education',
+  'leetcode.cn': 'education',
   'hackerrank.com': 'education',
+  'hackerearth.com': 'education',
+  'codechef.com': 'education',
+  'codeforces.com': 'education',
+  'atcoder.jp': 'education',
+  'spoj.com': 'education',
+  'interviewbit.com': 'education',
+  'neetcode.io': 'education',
+  'takeuforward.org': 'education',
+  'codingninjas.com': 'education',
   'freecodecamp.org': 'education',
   'wikipedia.org': 'education',
   'stackoverflow.com': 'education',
   'stackexchange.com': 'education',
   'medium.com': 'education',
   'developer.mozilla.org': 'education',
+  'programiz.com': 'education',
+  'javatpoint.com': 'education',
+  'tutorialspoint.com': 'education',
 
   // News
   'cnn.com': 'news',
@@ -136,26 +149,36 @@ const DOMAIN_CATEGORIES = {
 
 /** Substring hints on the hostname itself — used only when no exact/parent-domain match is found. */
 const KEYWORD_HINTS = [
+  { match: ['leetcode', 'hackerrank', 'codechef', 'codeforces', 'neetcode'], category: 'education' },
   { match: ['video', 'stream', 'movie', 'anime', 'watch'], category: 'video_streaming' },
   { match: ['game', 'gaming', 'arcade'], category: 'gaming' },
   { match: ['shop', 'store', 'cart', 'deal'], category: 'shopping' },
-  { match: ['news', 'times', 'herald', 'tribune', 'post'], category: 'news' },
+  { match: ['news', 'times', 'herald', 'tribune'], category: 'news' },
   { match: ['mail', 'chat', 'messenger'], category: 'communication' },
   { match: ['learn', 'academy', 'course', 'university', 'tutorial'], category: 'education' },
   { match: ['docs', 'drive', 'office', 'workspace', 'cloud', 'dev', 'code'], category: 'productivity' },
   { match: ['social', 'forum', 'community'], category: 'social_media' },
 ]
 
-/** Matches exact host, then progressively shorter parent domains (e.g. mail.google.com -> google.com) */
+/**
+ * Matches exact host, then parent domains (e.g. problems.leetcode.com -> leetcode.com).
+ * Skips bare TLDs like "com".
+ */
 export function categorizeDomain(hostname) {
   if (!hostname) return 'other'
-  const host = hostname.toLowerCase()
+  const host = hostname.toLowerCase().replace(/^www\./, '')
   if (DOMAIN_CATEGORIES[host]) return DOMAIN_CATEGORIES[host]
 
   const parts = host.split('.')
   for (let i = 1; i < parts.length - 1; i++) {
     const candidate = parts.slice(i).join('.')
     if (DOMAIN_CATEGORIES[candidate]) return DOMAIN_CATEGORIES[candidate]
+  }
+  // Two-label hosts already covered by exact match; also try last two labels
+  // for hosts like sub.domain.co.uk style where length > 2 failed above.
+  if (parts.length >= 2) {
+    const base = parts.slice(-2).join('.')
+    if (DOMAIN_CATEGORIES[base]) return DOMAIN_CATEGORIES[base]
   }
 
   for (const { match, category } of KEYWORD_HINTS) {

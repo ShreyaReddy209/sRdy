@@ -1,3 +1,5 @@
+import type { CategoryBreakdownItem, SiteUsage } from '../types/dashboard'
+
 export const CATEGORY_META: Record<string, { label: string; color: string }> = {
   social_media: { label: 'Social Media', color: '#ec4899' },
   video_streaming: { label: 'Video', color: '#8b5cf6' },
@@ -12,13 +14,23 @@ export const CATEGORY_META: Record<string, { label: string; color: string }> = {
 
 export function aggregateToCategoryList(
   timeByCategory: Record<string, number>,
-): { category: string; minutes: number; color: string }[] {
+  sites: SiteUsage[] = [],
+): CategoryBreakdownItem[] {
   return Object.entries(timeByCategory)
     .filter(([, minutes]) => minutes > 0)
     .sort((a, b) => b[1] - a[1])
-    .map(([key, minutes]) => ({
-      category: CATEGORY_META[key]?.label ?? key,
-      minutes: Math.round(minutes),
-      color: CATEGORY_META[key]?.color ?? '#94a3b8',
-    }))
+    .map(([key, minutes]) => {
+      const categorySites = sites
+        .filter((s) => s.category === key && s.minutes > 0)
+        .sort((a, b) => b.minutes - a.minutes)
+        .map((s) => ({ domain: s.domain, minutes: Math.round(s.minutes * 10) / 10 }))
+
+      return {
+        key,
+        category: CATEGORY_META[key]?.label ?? key,
+        minutes: Math.round(minutes * 10) / 10,
+        color: CATEGORY_META[key]?.color ?? '#94a3b8',
+        sites: categorySites,
+      }
+    })
 }

@@ -8,10 +8,12 @@ export default function UsagePage() {
     <div className="space-y-6">
       <div>
         <h1 className="page-title">Usage</h1>
-        <p className="page-desc">Where your screen time actually goes today.</p>
+        <p className="page-desc">
+          Where your screen time goes today — click a category to see every site and its minutes.
+        </p>
       </div>
 
-      <div className="max-w-md">
+      <div className="max-w-lg">
         <CategoryBreakdown categories={data.categoryBreakdown} isLive={aggregate !== null} />
       </div>
     </div>

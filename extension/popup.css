@@ -90,4 +90,32 @@ button:disabled {
   font-size: 11px;
   color: #a8a29e;
   margin: 10px 0;
+  line-height: 1.4;
+}
+.status-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+.status-active {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+.status-paused {
+  background: #fef3c7;
+  color: #b45309;
+}
+.status-idle {
+  background: #e7e5e4;
+  color: #57534e;
+}
+.mono {
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+}
+.ghost-btn + .ghost-btn {
+  margin-top: 6px;
 }

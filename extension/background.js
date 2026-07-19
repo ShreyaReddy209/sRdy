@@ -2,8 +2,14 @@ import { categorizeDomain } from './categoryMap.js'
 import { firestoreGet, firestoreSet, getValidAuth, signIn, signOutLocal } from './firestoreRest.js'
 
 const TICK_ALARM = 'wellsense-tick'
-const COMPULSIVE_THRESHOLD_SEC = 20
+/** Sessions shorter than this (seconds) after a real domain change count as a compulsive check. */
+const COMPULSIVE_THRESHOLD_SEC = 8
+/** Ignore "switches" that happen within this many ms of the previous one (focus flicker). */
+const SWITCH_DEBOUNCE_MS = 400
 const GOAL_CACHE_TTL_MS = 5 * 60 * 1000
+/** Chrome alarms are ~1 min; we accrue wall-clock delta, capped so a long sleep doesn't dump hours. */
+const MAX_ACCRUAL_SEC = 90
+const TICK_PERIOD_MS = 60_000
 
 let memoryState = null
 
@@ -32,6 +38,8 @@ function emptyStats() {
       communication: 0,
       other: 0,
     },
+    /** domain -> { seconds, category } — powers click-to-expand site lists on the dashboard */
+    timeByDomain: {},
     compulsiveCheckCount: 0,
     tabSwitchCount: 0,
     visitCount: 0,
@@ -39,6 +47,21 @@ function emptyStats() {
     idleSeconds: 0,
     lateNightSeconds: 0,
     sessionDurations: [],
+  }
+}
+
+/** Older local storage may lack timeByDomain — normalize on load. */
+function normalizeStats(stats) {
+  if (!stats.timeByDomain || typeof stats.timeByDomain !== 'object') {
+    stats.timeByDomain = {}
+  }
+  return stats
+}
+
+async function ensureAlarm() {
+  const existing = await chrome.alarms.get(TICK_ALARM)
+  if (!existing) {
+    await chrome.alarms.create(TICK_ALARM, { periodInMinutes: 1 })
   }
 }
 
@@ -52,16 +75,20 @@ async function loadState() {
     'isIdle',
     'windowFocused',
     'cachedGoal',
+    'lastTickAt',
+    'lastSwitchAt',
   ])
   const today = todayKey()
 
   memoryState = {
     todayDate: stored.todayDate ?? today,
-    todayStats: stored.todayStats ?? emptyStats(),
+    todayStats: normalizeStats(stored.todayStats ?? emptyStats()),
     currentSession: stored.currentSession ?? null,
     isIdle: stored.isIdle ?? false,
     windowFocused: stored.windowFocused ?? true,
     cachedGoal: stored.cachedGoal ?? null,
+    lastTickAt: stored.lastTickAt ?? Date.now(),
+    lastSwitchAt: stored.lastSwitchAt ?? 0,
   }
 
   if (memoryState.todayDate !== today) {
@@ -80,6 +107,8 @@ async function saveState() {
     isIdle: memoryState.isIdle,
     windowFocused: memoryState.windowFocused,
     cachedGoal: memoryState.cachedGoal,
+    lastTickAt: memoryState.lastTickAt,
+    lastSwitchAt: memoryState.lastSwitchAt,
   })
 }
 
@@ -88,6 +117,7 @@ async function rolloverDay(newDate) {
   memoryState.todayDate = newDate
   memoryState.todayStats = emptyStats()
   memoryState.currentSession = null
+  memoryState.lastTickAt = Date.now()
 }
 
 function extractDomain(url) {
@@ -100,36 +130,78 @@ function extractDomain(url) {
   }
 }
 
-async function switchSession(domain, now = Date.now()) {
+/**
+ * Change the tracked domain. Only counts tab switches / compulsive checks when
+ * the user actually moves between two different http domains — NOT on window blur.
+ */
+/** Always resolve category from the live domain map (never trust a stale session.category). */
+function categoryFor(domain) {
+  return categorizeDomain(domain)
+}
+
+async function switchSession(domain, now = Date.now(), { countSwitch = true } = {}) {
   const state = await loadState()
   const prev = state.currentSession
 
-  if (prev && prev.domain === domain) return
-
-  if (prev) {
-    const durationSec = (now - prev.startedAt) / 1000
-    state.todayStats.sessionDurations.push(durationSec)
-    if (durationSec < COMPULSIVE_THRESHOLD_SEC) {
-      state.todayStats.compulsiveCheckCount += 1
+  // Same domain: still refresh category in case the map was updated after Load/Reload
+  if (prev && prev.domain === domain) {
+    const cat = categoryFor(domain)
+    if (prev.category !== cat) {
+      state.currentSession = { ...prev, category: cat }
+      await saveState()
     }
-    state.todayStats.tabSwitchCount += 1
+    return
+  }
+
+  // Debounce rapid flicker (focus thrash / SPA redirects)
+  if (countSwitch && now - state.lastSwitchAt < SWITCH_DEBOUNCE_MS) {
+    if (domain) {
+      state.currentSession = { domain, category: categoryFor(domain), startedAt: now }
+      await saveState()
+    }
+    return
+  }
+
+  if (prev && countSwitch) {
+    const durationSec = (now - prev.startedAt) / 1000
+    // Only record meaningful sessions (ignore sub-second glitches)
+    if (durationSec >= 0.5) {
+      state.todayStats.sessionDurations.push(durationSec)
+      state.todayStats.tabSwitchCount += 1
+      if (durationSec < COMPULSIVE_THRESHOLD_SEC) {
+        state.todayStats.compulsiveCheckCount += 1
+      }
+    }
+    state.lastSwitchAt = now
   }
 
   if (domain) {
-    state.todayStats.visitCount += 1
-    state.currentSession = { domain, category: categorizeDomain(domain), startedAt: now }
+    if (!prev || prev.domain !== domain) {
+      state.todayStats.visitCount += 1
+    }
+    state.currentSession = { domain, category: categoryFor(domain), startedAt: now }
   } else {
-    state.currentSession = null
+    // Keep last domain for display; caller sets windowFocused=false to pause accrual
+    // Do not wipe currentSession here.
   }
 
   await saveState()
 }
 
 async function handleActiveTabChange(tab) {
-  if (!tab || !tab.url) return
-  await switchSession(extractDomain(tab.url))
+  if (!tab?.url) return
+  const domain = extractDomain(tab.url)
+  if (!domain) return
+  const state = await loadState()
+  state.windowFocused = true
+  await saveState()
+  await switchSession(domain, Date.now(), { countSwitch: true })
 }
 
+/**
+ * Sync focus + active tab. On blur we PAUSE time accrual but keep showing the last site.
+ * Previously this called switchSession(null), which wiped "Current site" and inflated switches.
+ */
 async function refreshActiveTabState() {
   const state = await loadState()
 
@@ -140,17 +212,23 @@ async function refreshActiveTabState() {
     win = null
   }
 
-  const focused = Boolean(win && win.focused)
+  const focused = Boolean(win?.focused)
   state.windowFocused = focused
   await saveState()
 
   if (!focused || !win) {
-    await switchSession(null)
+    // Pause only — do not clear currentSession or count a tab switch
     return
   }
 
   const activeTab = win.tabs?.find((t) => t.active)
-  await handleActiveTabChange(activeTab)
+  if (activeTab?.url) {
+    const domain = extractDomain(activeTab.url)
+    if (domain) {
+      // Same domain after refocus: resume (switchSession refreshes category if map changed)
+      await switchSession(domain, Date.now(), { countSwitch: state.currentSession?.domain !== domain })
+    }
+  }
 }
 
 chrome.tabs.onActivated.addListener(async (info) => {
@@ -168,7 +246,13 @@ chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
   await handleActiveTabChange(tab)
 })
 
-chrome.windows.onFocusChanged.addListener(async () => {
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) {
+    const state = await loadState()
+    state.windowFocused = false
+    await saveState()
+    return
+  }
   await refreshActiveTabState()
 })
 
@@ -179,35 +263,56 @@ chrome.idle.onStateChanged.addListener(async (newState) => {
   await saveState()
 })
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create(TICK_ALARM, { periodInMinutes: 1 })
-  refreshActiveTabState()
+chrome.runtime.onInstalled.addListener(async () => {
+  await ensureAlarm()
+  await refreshActiveTabState()
 })
 
-chrome.runtime.onStartup.addListener(() => {
-  chrome.alarms.create(TICK_ALARM, { periodInMinutes: 1 })
-  refreshActiveTabState()
+chrome.runtime.onStartup.addListener(async () => {
+  await ensureAlarm()
+  await refreshActiveTabState()
 })
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === TICK_ALARM) await tick()
 })
 
+/**
+ * Accrue real wall-clock seconds since last tick (not a blind +60).
+ * Re-reads the active tab first so we don't credit the wrong site.
+ */
 async function tick() {
+  await ensureAlarm()
   const state = await loadState()
   const today = todayKey()
   if (state.todayDate !== today) {
     await rolloverDay(today)
   }
 
-  if (state.currentSession && state.windowFocused) {
-    if (!state.isIdle) {
-      state.todayStats.activeSeconds += 60
-      const cat = state.currentSession.category
-      state.todayStats.timeByCategory[cat] = (state.todayStats.timeByCategory[cat] || 0) + 60
-      if (isLateNight()) state.todayStats.lateNightSeconds += 60
+  const now = Date.now()
+  const elapsedSec = Math.min(Math.max((now - state.lastTickAt) / 1000, 0), MAX_ACCRUAL_SEC)
+  state.lastTickAt = now
+
+  // Refresh focus/tab before accruing so pause/resume is accurate
+  await refreshActiveTabState()
+  const fresh = await loadState()
+
+  if (elapsedSec > 0.5 && fresh.currentSession && fresh.windowFocused) {
+    if (!fresh.isIdle) {
+      // Re-categorize every tick so an outdated "other" session cannot keep poisoning totals
+      const domain = fresh.currentSession.domain
+      const cat = categoryFor(domain)
+      fresh.currentSession.category = cat
+      fresh.todayStats.activeSeconds += elapsedSec
+      fresh.todayStats.timeByCategory[cat] = (fresh.todayStats.timeByCategory[cat] || 0) + elapsedSec
+      if (!fresh.todayStats.timeByDomain) fresh.todayStats.timeByDomain = {}
+      const domainEntry = fresh.todayStats.timeByDomain[domain] ?? { seconds: 0, category: cat }
+      domainEntry.seconds += elapsedSec
+      domainEntry.category = cat
+      fresh.todayStats.timeByDomain[domain] = domainEntry
+      if (isLateNight()) fresh.todayStats.lateNightSeconds += elapsedSec
     } else {
-      state.todayStats.idleSeconds += 60
+      fresh.todayStats.idleSeconds += elapsedSec
     }
   }
 
@@ -261,10 +366,25 @@ async function flushAggregate() {
     Object.entries(stats.timeByCategory).map(([k, v]) => [k, Math.round((v / 60) * 10) / 10]),
   )
 
+  // Per-site breakdown (sorted by minutes desc) for dashboard drill-down
+  const sites = Object.entries(stats.timeByDomain || {})
+    .map(([domain, entry]) => ({
+      domain,
+      category: entry.category || categoryFor(domain),
+      minutes: Math.round((entry.seconds / 60) * 10) / 10,
+    }))
+    .filter((s) => s.minutes > 0)
+    .sort((a, b) => b.minutes - a.minutes)
+
+  // Switches per hour of active browsing — stable even with low early minutes
+  const hoursActive = Math.max(activeMinutes / 60, 1 / 60)
+  const tabSwitchFrequency = Math.round((stats.tabSwitchCount / hoursActive) * 10) / 10
+
   const aggregate = {
     timeByCategory: timeByCategoryMinutes,
+    sites,
     compulsiveCheckCount: stats.compulsiveCheckCount,
-    tabSwitchFrequency: activeMinutes > 0 ? Math.round((stats.tabSwitchCount / (activeMinutes / 60)) * 10) / 10 : 0,
+    tabSwitchFrequency,
     lateNightRatio: stats.activeSeconds > 0 ? Math.round((stats.lateNightSeconds / stats.activeSeconds) * 100) / 100 : 0,
     activeIdleRatio:
       totalTrackedSeconds > 0 ? Math.round((stats.activeSeconds / totalTrackedSeconds) * 100) / 100 : 0,
@@ -281,11 +401,52 @@ async function flushAggregate() {
   }
 }
 
+function buildStatsPayload(state) {
+  const nextTickAt = (state.lastTickAt || Date.now()) + TICK_PERIOD_MS
+  const secondsToSync = Math.max(0, Math.ceil((nextTickAt - Date.now()) / 1000))
+  const domain = state.currentSession?.domain ?? null
+  const currentCategory = domain ? categoryFor(domain) : null
+  // Keep session.category in sync for the next tick
+  if (state.currentSession && currentCategory && state.currentSession.category !== currentCategory) {
+    state.currentSession.category = currentCategory
+  }
+  return {
+    stats: state.todayStats,
+    currentDomain: domain,
+    currentCategory,
+    isPaused: !state.windowFocused || state.isIdle,
+    isIdle: state.isIdle,
+    windowFocused: state.windowFocused,
+    lastTickAt: state.lastTickAt,
+    nextTickAt,
+    secondsToSync,
+  }
+}
+
+/** Wipe today's totals so a day poisoned by stale "other" can start clean. */
+async function resetTodayStats() {
+  const state = await loadState()
+  const domain = state.currentSession?.domain ?? null
+  state.todayStats = emptyStats()
+  state.lastTickAt = Date.now()
+  if (domain) {
+    state.currentSession = {
+      domain,
+      category: categoryFor(domain),
+      startedAt: Date.now(),
+    }
+  }
+  await saveState()
+  await flushAggregate()
+  return buildStatsPayload(state)
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'WELLSENSE_SIGN_IN') {
     signIn(msg.email, msg.password)
       .then(async () => {
         memoryState = null
+        await ensureAlarm()
         await refreshActiveTabState()
         await flushAggregate()
         sendResponse({ ok: true })
@@ -300,14 +461,31 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg.type === 'WELLSENSE_GET_STATS') {
-    loadState().then((state) => {
-      sendResponse({
-        stats: state.todayStats,
-        currentDomain: state.currentSession?.domain ?? null,
-      })
-    })
+    ensureAlarm()
+      .then(() => loadState())
+      .then((state) => sendResponse(buildStatsPayload(state)))
+      .catch(() => sendResponse(null))
+    return true
+  }
+
+  if (msg.type === 'WELLSENSE_FORCE_SYNC') {
+    tick()
+      .then(() => loadState())
+      .then((state) => sendResponse({ ok: true, ...buildStatsPayload(state) }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }))
+    return true
+  }
+
+  if (msg.type === 'WELLSENSE_RESET_TODAY') {
+    resetTodayStats()
+      .then((payload) => sendResponse({ ok: true, ...payload }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }))
     return true
   }
 
   return false
 })
+
+// Service worker may wake without onInstalled — keep alarm alive
+ensureAlarm()
+refreshActiveTabState()

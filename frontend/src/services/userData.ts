@@ -118,21 +118,28 @@ export async function getDailyAggregate(
   const snap = await getDoc(doc(requireDb(), 'users', uid, 'dailyAggregates', date))
   if (!snap.exists()) return null
   const d = snap.data()
-  return {
-    timeByCategory: d.timeByCategory ?? {},
-    compulsiveCheckCount: d.compulsiveCheckCount ?? 0,
-    tabSwitchFrequency: d.tabSwitchFrequency ?? 0,
-    lateNightRatio: d.lateNightRatio ?? 0,
-    activeIdleRatio: d.activeIdleRatio ?? 0.5,
-    avgSessionLengthMin: d.avgSessionLengthMin ?? 0,
-    goalAlignmentScore: d.goalAlignmentScore ?? 0.5,
-    totalActiveMinutes: d.totalActiveMinutes ?? 0,
-  }
+  return aggregateFromDoc(d)
+}
+
+function parseSites(raw: unknown): DailyAggregate['sites'] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const o = item as Record<string, unknown>
+      const domain = typeof o.domain === 'string' ? o.domain : null
+      const category = typeof o.category === 'string' ? o.category : 'other'
+      const minutes = typeof o.minutes === 'number' ? o.minutes : Number(o.minutes)
+      if (!domain || !Number.isFinite(minutes) || minutes <= 0) return null
+      return { domain, category, minutes }
+    })
+    .filter((s): s is DailyAggregate['sites'][number] => s !== null)
 }
 
 function aggregateFromDoc(d: Record<string, unknown>): DailyAggregate {
   return {
     timeByCategory: (d.timeByCategory as Record<string, number>) ?? {},
+    sites: parseSites(d.sites),
     compulsiveCheckCount: (d.compulsiveCheckCount as number) ?? 0,
     tabSwitchFrequency: (d.tabSwitchFrequency as number) ?? 0,
     lateNightRatio: (d.lateNightRatio as number) ?? 0,
